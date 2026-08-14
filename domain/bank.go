@@ -32,18 +32,19 @@ type Transaction struct {
 }
 
 // -----------------------------------------------------------------------------
-// INTERFACES (Kontrak Arsitektur Clean Architecture)
+// INTERFACES (Kontrak Clean Architecture dengan Transaction Support)
 // -----------------------------------------------------------------------------
 
-// BankRepository adalah kontrak untuk Data Access Layer (DB / Memory)
 type BankRepository interface {
 	CreateAccount(ctx context.Context, acc *Account) error
 	GetAccountByID(ctx context.Context, id string) (*Account, error)
 	UpdateAccountBalance(ctx context.Context, id string, newBalance float64) error
 	CreateTransaction(ctx context.Context, tx *Transaction) error
+	
+	// ExecTx mengeksekusi operasi repository di dalam 1 DB Transaction (ACID)
+	ExecTx(ctx context.Context, fn func(repo BankRepository) error) error
 }
 
-// BankUsecase adalah kontrak untuk Business Logic Layer
 type BankUsecase interface {
 	CreateAccount(ctx context.Context, ownerName string, initialBalance float64) (*Account, error)
 	GetAccountByID(ctx context.Context, id string) (*Account, error)
