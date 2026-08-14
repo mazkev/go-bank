@@ -3,16 +3,16 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"gotest/domain"
 )
 
 type bankUsecase struct {
-	repo       domain.BankRepository
-	accCounter int64
-	txCounter  int64
+	repo domain.BankRepository
 }
 
 // NewBankUsecase membuat instance baru BankUsecase dengan Dependency Injection
@@ -27,8 +27,9 @@ func (u *bankUsecase) CreateAccount(ctx context.Context, ownerName string, initi
 		return nil, domain.ErrInvalidAmount
 	}
 
-	// Generate ID unik
-	newAccID := fmt.Sprintf("ACC-%03d", atomic.AddInt64(&u.accCounter, 1))
+	// Generate ID unik berbasis UUID (contoh: ACC-A1B2C3D4)
+	shortUUID := strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", "")[:8])
+	newAccID := fmt.Sprintf("ACC-%s", shortUUID)
 
 	acc := &domain.Account{
 		ID:        newAccID,
@@ -56,45 +57,61 @@ func (u *bankUsecase) Transfer(ctx context.Context, fromID, toID string, amount 
 		return nil, domain.ErrSameAccountTransfer
 	}
 
-	// 1. Ambil data rekening pengirim
-	fromAcc, err := u.repo.GetAccountByID(ctx, fromID)
+	var createdTx *domain.Transaction
+
+	// ExecTx membungkus 5 langkah berikut ke dalam 1 DB Transaction (ACID)
+	err := u.repo.ExecTx(ctx, func(txRepo domain.BankRepository) error {
+		// 1. Ambil data rekening pengirim
+		fromAcc, err := txRepo.GetAccountByID(ctx, fromID)
+		if err != nil {
+			return err
+		}
+
+		// 2. Ambil data rekening penerima
+		toAcc, err := txRepo.GetAccountByID(ctx, toID)
+		if err != nil {
+			return err
+		}
+
+		// 3. Validasi Kecukupan Saldo (Business Rule)
+		if fromAcc.Balance < amount {
+			return domain.ErrInsufficientBalance
+		}
+
+		// 4. Update Saldo Pengirim & Penerima
+		if err := txRepo.UpdateAccountBalance(ctx, fromID, fromAcc.Balance-amount); err != nil {
+			return err
+		}
+		if err := txRepo.UpdateAccountBalance(ctx, toID, toAcc.Balance+amount); err != nil {
+			return err
+		}
+
+		// 5. Catat Histori Transaksi (UUID Unik)
+		shortTxUUID := strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", "")[:8])
+		newTxID := fmt.Sprintf("TX-%s", shortTxUUID)
+
+		tx := &domain.Transaction{
+			ID:            newTxID,
+			FromAccountID: fromID,
+			ToAccountID:   toID,
+			Amount:        amount,
+			Type:          "TRANSFER",
+			Timestamp:     time.Now(),
+		}
+
+		if err := txRepo.CreateTransaction(ctx, tx); err != nil {
+			return err
+		}
+
+		createdTx = tx
+		return nil // Mengembalikan nil = Commit Transaksi Otomatis
+	})
+
+	// Jika ada error sekecil apapun di dalam ExecTx = Rollback Transaksi Otomatis!
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Ambil data rekening penerima
-	toAcc, err := u.repo.GetAccountByID(ctx, toID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Validasi Kecukupan Saldo (Business Rule)
-	if fromAcc.Balance < amount {
-		return nil, domain.ErrInsufficientBalance
-	}
-
-	// 4. Update Saldo Pengirim & Penerima
-	if err := u.repo.UpdateAccountBalance(ctx, fromID, fromAcc.Balance-amount); err != nil {
-		return nil, err
-	}
-	if err := u.repo.UpdateAccountBalance(ctx, toID, toAcc.Balance+amount); err != nil {
-		return nil, err
-	}
-
-	// 5. Catat Histori Transaksi
-	newTxID := fmt.Sprintf("TX-%03d", atomic.AddInt64(&u.txCounter, 1))
-	tx := &domain.Transaction{
-		ID:            newTxID,
-		FromAccountID: fromID,
-		ToAccountID:   toID,
-		Amount:        amount,
-		Type:          "TRANSFER",
-		Timestamp:     time.Now(),
-	}
-
-	if err := u.repo.CreateTransaction(ctx, tx); err != nil {
-		return nil, err
-	}
-
-	return tx, nil
+	return createdTx, nil
 }
+

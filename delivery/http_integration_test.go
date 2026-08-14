@@ -55,8 +55,10 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 	})
 
 	var tokenBudi string
+	var accountIDBudi string
+	var accountIDSiti string
 
-	// 2. TEST: Register User 'budi' (Dapat Akun ACC-001 Saldo 1.000.000)
+	// 2. TEST: Register User 'budi' (Dapat Akun Saldo 1.000.000)
 	t.Run("2. Register User Budi", func(t *testing.T) {
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"username":        "budi",
@@ -81,10 +83,11 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 			t.Errorf("Token JWT tidak boleh kosong!")
 		}
 		tokenBudi = res.Token
-		t.Logf("Token JWT Budi Berhasil Didapat: %s", tokenBudi[:20]+"...")
+		accountIDBudi = res.User.AccountID
+		t.Logf("Token Budi: %s..., AccountID: %s", tokenBudi[:20], accountIDBudi)
 	})
 
-	// 3. TEST: Register User 'siti' (Dapat Akun ACC-002 Saldo 500.000)
+	// 3. TEST: Register User 'siti' (Dapat Akun Saldo 500.000)
 	t.Run("3. Register User Siti", func(t *testing.T) {
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"username":        "siti",
@@ -101,6 +104,10 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 		if resp.StatusCode != http.StatusCreated {
 			t.Fatalf("Ekspektasi Status 201 Created, dapat: %d", resp.StatusCode)
 		}
+
+		var res delivery.AuthResponse
+		json.NewDecoder(resp.Body).Decode(&res)
+		accountIDSiti = res.User.AccountID
 	})
 
 	// 4. TEST: Login User Budi dengan Password Salah (Harus Status 401)
@@ -123,7 +130,7 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 
 	// 5. TEST: Get Account Details Membawa Bearer Token
 	t.Run("5. Protected Get Account Details With JWT Token", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/accounts/get?id=ACC-001", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/accounts/get?id="+accountIDBudi, nil)
 		req.Header.Set("Authorization", "Bearer "+tokenBudi)
 
 		resp, err := client.Do(req)
@@ -139,16 +146,16 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 		var acc map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&acc)
 
-		if acc["id"] != "ACC-001" || acc["owner_name"] != "budi" {
+		if acc["id"] != accountIDBudi || acc["owner_name"] != "budi" {
 			t.Errorf("Data akun tidak sesuai: %v", acc)
 		}
 	})
 
-	// 6. TEST: Transfer Saldo Rp 300.000 dari ACC-001 (Budi) ke ACC-002 (Siti) Membawa Bearer Token
+	// 6. TEST: Transfer Saldo Rp 300.000 dari Budi ke Siti Membawa Bearer Token
 	t.Run("6. Protected Transfer Saldo With JWT Token", func(t *testing.T) {
 		transferBody, _ := json.Marshal(map[string]interface{}{
-			"from_account_id": "ACC-001",
-			"to_account_id":   "ACC-002",
+			"from_account_id": accountIDBudi,
+			"to_account_id":   accountIDSiti,
 			"amount":          300000,
 		})
 
