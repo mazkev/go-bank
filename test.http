@@ -1,0 +1,94 @@
+### ============================================================================
+### BANK API REST CLIENT TEST FILE (VS Code / Antigravity REST Client Extension)
+### ============================================================================
+
+@baseUrl = http://localhost:8080
+
+### ----------------------------------------------------------------------------
+### 1. REGISTRASI USER BUDI (Mendapatkan Akun ACC-001 dengan Saldo 1.000.000)
+### ----------------------------------------------------------------------------
+# @name registerBudi
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "budi",
+  "password": "password123",
+  "initial_balance": 1000000
+}
+
+### Simpan Token Budi dari Response Registrasi
+@tokenBudi = {{registerBudi.response.body.token}}
+
+
+### ----------------------------------------------------------------------------
+### 2. REGISTRASI USER SITI (Mendapatkan Akun ACC-002 dengan Saldo 500.000)
+### ----------------------------------------------------------------------------
+# @name registerSiti
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "siti",
+  "password": "password456",
+  "initial_balance": 500000
+}
+
+
+### ----------------------------------------------------------------------------
+### 3. TEST LOGIN BUDI (PASSWORD BENAR)
+### ----------------------------------------------------------------------------
+# @name loginBudi
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "budi",
+  "password": "password123"
+}
+
+
+### ----------------------------------------------------------------------------
+### 4. TEST LOGIN BUDI (PASSWORD SALAH - HARUS ERROR 401)
+### ----------------------------------------------------------------------------
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "budi",
+  "password": "wrongpassword"
+}
+
+
+### ----------------------------------------------------------------------------
+### 5. TEST AKSES AKUN BUDI TANPA TOKEN (HARUS ERROR 401 UNAUTHORIZED)
+### ----------------------------------------------------------------------------
+GET {{baseUrl}}/accounts/get?id=ACC-001
+
+
+### ----------------------------------------------------------------------------
+### 6. CEK DATA REKENING BUDI (ACC-001) - MENGGUNAKAN BEARER TOKEN
+### ----------------------------------------------------------------------------
+GET {{baseUrl}}/accounts/get?id=ACC-001
+Authorization: Bearer {{tokenBudi}}
+
+
+### ----------------------------------------------------------------------------
+### 7. TRANSFER SALDO RP 350.000 DARI BUDI (ACC-001) KE SITI (ACC-002)
+### ----------------------------------------------------------------------------
+POST {{baseUrl}}/accounts/transfer
+Authorization: Bearer {{tokenBudi}}
+Content-Type: application/json
+
+{
+  "from_account_id": "ACC-001",
+  "to_account_id": "ACC-002",
+  "amount": 350000
+}
+
+
+### ----------------------------------------------------------------------------
+### 8. CEK SALDO AKHIR SITI (ACC-002) SETELAH DITRANSFER (HARUS BEKERJA)
+### ----------------------------------------------------------------------------
+GET {{baseUrl}}/accounts/get?id=ACC-002
+Authorization: Bearer {{tokenBudi}}
