@@ -62,3 +62,11 @@ func (r *gormBankRepository) UpdateAccountBalance(ctx context.Context, id string
 func (r *gormBankRepository) CreateTransaction(ctx context.Context, tx *domain.Transaction) error {
 	return r.db.WithContext(ctx).Create(tx).Error
 }
+
+// ExecTx mengeksekusi sekumpulan operasi DB di dalam 1 GORM Transaction (ACID)
+func (r *gormBankRepository) ExecTx(ctx context.Context, fn func(repo domain.BankRepository) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := &gormBankRepository{db: tx}
+		return fn(txRepo)
+	})
+}

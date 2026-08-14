@@ -60,3 +60,11 @@ func (r *memoryBankRepository) CreateTransaction(ctx context.Context, tx *domain
 	r.transactions = append(r.transactions, *tx)
 	return nil
 }
+// ExecTx untuk in-memory repository (menggunakan mutex lock)
+func (r *memoryBankRepository) ExecTx(ctx context.Context, fn func(repo domain.BankRepository) error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return fn(r)
+}
+
