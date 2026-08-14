@@ -12,8 +12,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
 	"gotest/config"
 	"gotest/delivery"
+	_ "gotest/docs"
 	"gotest/repository"
 	"gotest/usecase"
 )
@@ -52,6 +56,11 @@ func main() {
 	r.Use(delivery.RateLimitMiddleware(5, 10)) // Batas: 5 req/detik, burst 10
 
 	// -------------------------------------------------------------------------
+	// SWAGGER OPENAPI DOCUMENTATION ROUTE
+	// -------------------------------------------------------------------------
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// -------------------------------------------------------------------------
 	// GIN ROUTE GROUPS
 	// -------------------------------------------------------------------------
 	authGroup := r.Group("/auth")
@@ -77,8 +86,9 @@ func main() {
 
 	go func() {
 		fmt.Printf("\n🚀 High-Performance Production Bank API berjalan di http://localhost:%s\n", cfg.Port)
+		fmt.Printf("📖 Interactive Swagger API UI: http://localhost:%s/swagger/index.html\n", cfg.Port)
 		fmt.Println("🛡️  Protection: IP Rate Limiter Active (5 req/sec, burst 10)")
-		fmt.Println("⚡ Features: Gin Router, CORS, Graceful Shutdown, .env Config, JWT Auth, GORM SQLite DB")
+		fmt.Println("⚡ Features: Gin Router, CORS, Graceful Shutdown, .env Config, JWT Auth, GORM SQLite DB, Swagger UI")
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server Listen error: %v\n", err)
