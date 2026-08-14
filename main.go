@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
+
+	"github.com/gin-gonic/gin"
 
 	"gotest/delivery"
 	"gotest/repository"
@@ -11,7 +12,7 @@ import (
 )
 
 func main() {
-	// 1. Inisialisasi Database SQLite Nyata ('bank.db') & Auto-Migrate Tabel
+	// 1. Inisialisasi Database SQLite Nyata ('bank.db')
 	db, err := repository.InitDB("bank.db")
 	if err != nil {
 		log.Fatalf("Gagal terhubung ke Database: %v", err)
@@ -21,33 +22,48 @@ func main() {
 	// 2. Secret Key JWT
 	jwtSecret := "SuperSecretBankKey2026"
 
-	// 3. Inisialisasi GORM Repositories (Menggantikan In-Memory)
+	// 3. Inisialisasi GORM Repositories
 	bankRepo := repository.NewGORMBankRepository(db)
 	userRepo := repository.NewGORMUserRepository(db)
 
-	// 4. Inisialisasi Usecases (Menggunakan Dependency Injection ke GORM Repo)
+	// 4. Inisialisasi Usecases
 	bankUsecase := usecase.NewBankUsecase(bankRepo)
 	authUsecase := usecase.NewAuthUsecase(userRepo, bankUsecase, jwtSecret)
 
-	// 5. Inisialisasi Handlers & Middleware
-	bankHandler := delivery.NewBankHandler(bankUsecase)
-	authHandler := delivery.NewAuthHandler(authUsecase)
-	authMiddleware := delivery.NewAuthMiddleware(authUsecase)
+	// 5. Inisialisasi Gin Handlers & Middlewares
+	ginBankHandler := delivery.NewGinBankHandler(bankUsecase, authUsecase)
+	ginAuthMiddleware := delivery.NewGinAuthMiddleware(authUsecase)
+
+	// 6. Inisialisasi Gin Engine (Termasuk Logger & Recovery Middleware)
+	r := gin.Default()
+
+	// Pasang CORS Middleware (Agar bisa diakses oleh Frontend React/Vue)
+	r.Use(delivery.CORSMiddleware())
 
 	// -------------------------------------------------------------------------
-	// REGISTRASI ROUTE HTTP
+	// GIN ROUTE GROUPS
 	// -------------------------------------------------------------------------
-	http.HandleFunc("/auth/register", authHandler.Register)
-	http.HandleFunc("/auth/login", authHandler.Login)
-	http.HandleFunc("/accounts/get", authMiddleware.Protect(bankHandler.GetAccountByID))
-	http.HandleFunc("/accounts/transfer", authMiddleware.Protect(bankHandler.Transfer))
+
+	// Public Routes Group (/auth)
+	authGroup := r.Group("/auth")
+	{
+		authGroup.POST("/register", ginBankHandler.Register)
+		authGroup.POST("/login", ginBankHandler.Login)
+	}
+
+	// Protected Routes Group (/accounts) - Diproteksi JWT Auth Middleware
+	accountGroup := r.Group("/accounts")
+	accountGroup.Use(ginAuthMiddleware.RequireAuth())
+	{
+		accountGroup.GET("/get", ginBankHandler.GetAccountByID)
+		accountGroup.POST("/transfer", ginBankHandler.Transfer)
+	}
 
 	port := ":8080"
-	fmt.Printf("🚀 Enterprise GORM SQLite Bank API berjalan di http://localhost%s\n", port)
-	fmt.Println("🔒 Protected Routes: /accounts/get & /accounts/transfer")
-	fmt.Println("Tekan Ctrl+C untuk menghentikan server.")
+	fmt.Printf("\n🚀 High-Performance Gin Engine Bank API berjalan di http://localhost%s\n", port)
+	fmt.Println("⚡ Features: Gin Router, CORS, Structured Logger, Panic Recovery, JWT Auth, GORM SQLite DB")
 
-	if err := http.ListenAndServe(port, nil); err != nil {
-		fmt.Printf("Server error: %v\n", err)
+	if err := r.Run(port); err != nil {
+		log.Fatalf("Server error: %v", err)
 	}
 }
