@@ -1,11 +1,12 @@
-### ============================================================================
-### BANK API REST CLIENT TEST FILE (VS Code / Antigravity REST Client Extension)
-### ============================================================================
+### ----------------------------------------------------------------------------
+### SWAGGER DOCUMENTATION UI (Buka di Browser)
+### http://localhost:8080/swagger/index.html
+### ----------------------------------------------------------------------------
 
 @baseUrl = http://localhost:8080
 
 ### ----------------------------------------------------------------------------
-### 1. REGISTRASI USER BUDI (Mendapatkan Akun ACC-001 dengan Saldo 1.000.000)
+### 1. REGISTER USER BUDI (Otomatis dapat Nomor Rekening 10-digit & PIN 123456)
 ### ----------------------------------------------------------------------------
 # @name registerBudi
 POST {{baseUrl}}/auth/register
@@ -14,15 +15,17 @@ Content-Type: application/json
 {
   "username": "budi",
   "password": "password123",
+  "pin": "123456",
   "initial_balance": 1000000
 }
 
-### Simpan Token Budi dari Response Registrasi
+### Tangkap Token JWT & Account ID Budi
 @tokenBudi = {{registerBudi.response.body.token}}
+@accIDBudi = {{registerBudi.response.body.user.account_id}}
 
 
 ### ----------------------------------------------------------------------------
-### 2. REGISTRASI USER SITI (Mendapatkan Akun ACC-002 dengan Saldo 500.000)
+### 2. REGISTER USER SITI (PIN 654321, Saldo Rp 500.000)
 ### ----------------------------------------------------------------------------
 # @name registerSiti
 POST {{baseUrl}}/auth/register
@@ -31,12 +34,16 @@ Content-Type: application/json
 {
   "username": "siti",
   "password": "password456",
+  "pin": "654321",
   "initial_balance": 500000
 }
 
+### Tangkap Account ID Siti
+@accIDSiti = {{registerSiti.response.body.user.account_id}}
+
 
 ### ----------------------------------------------------------------------------
-### 3. TEST LOGIN BUDI (PASSWORD BENAR)
+### 3. LOGIN USER BUDI
 ### ----------------------------------------------------------------------------
 # @name loginBudi
 POST {{baseUrl}}/auth/login
@@ -49,46 +56,44 @@ Content-Type: application/json
 
 
 ### ----------------------------------------------------------------------------
-### 4. TEST LOGIN BUDI (PASSWORD SALAH - HARUS ERROR 401)
+### 4. GET DETAIL REKENING BUDI (Membawa Token JWT)
 ### ----------------------------------------------------------------------------
-POST {{baseUrl}}/auth/login
-Content-Type: application/json
-
-{
-  "username": "budi",
-  "password": "wrongpassword"
-}
-
-
-### ----------------------------------------------------------------------------
-### 5. TEST AKSES AKUN BUDI TANPA TOKEN (HARUS ERROR 401 UNAUTHORIZED)
-### ----------------------------------------------------------------------------
-GET {{baseUrl}}/accounts/get?id=ACC-001
-
-
-### ----------------------------------------------------------------------------
-### 6. CEK DATA REKENING BUDI (ACC-001) - MENGGUNAKAN BEARER TOKEN
-### ----------------------------------------------------------------------------
-GET {{baseUrl}}/accounts/get?id=ACC-001
+GET {{baseUrl}}/accounts/get?id={{accIDBudi}}
 Authorization: Bearer {{tokenBudi}}
 
 
 ### ----------------------------------------------------------------------------
-### 7. TRANSFER SALDO RP 350.000 DARI BUDI (ACC-001) KE SITI (ACC-002)
+### 5. TRANSFER SALDO RP 350.000 DARI BUDI KE SITI (Dengan Verifikasi PIN 123456)
 ### ----------------------------------------------------------------------------
 POST {{baseUrl}}/accounts/transfer
 Authorization: Bearer {{tokenBudi}}
 Content-Type: application/json
 
 {
-  "from_account_id": "ACC-001",
-  "to_account_id": "ACC-002",
-  "amount": 350000
+  "from_account_id": "{{accIDBudi}}",
+  "to_account_id": "{{accIDSiti}}",
+  "pin": "123456",
+  "amount": 350000,
+  "description": "Transfer Bayar Sewa Kos"
 }
 
 
 ### ----------------------------------------------------------------------------
-### 8. CEK SALDO AKHIR SITI (ACC-002) SETELAH DITRANSFER (HARUS BEKERJA)
+### 6. TARIK TUNAI RP 100.000 DI ATM (Dengan Verifikasi PIN 123456)
 ### ----------------------------------------------------------------------------
-GET {{baseUrl}}/accounts/get?id=ACC-002
+POST {{baseUrl}}/accounts/withdraw
+Authorization: Bearer {{tokenBudi}}
+Content-Type: application/json
+
+{
+  "account_id": "{{accIDBudi}}",
+  "pin": "123456",
+  "amount": 100000
+}
+
+
+### ----------------------------------------------------------------------------
+### 7. CEK MUTASI & HISTORI TRANSAKSI REKENING BUDI
+### ----------------------------------------------------------------------------
+GET {{baseUrl}}/accounts/mutations?account_id={{accIDBudi}}
 Authorization: Bearer {{tokenBudi}}

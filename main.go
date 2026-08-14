@@ -74,6 +74,8 @@ func main() {
 	{
 		accountGroup.GET("/get", ginBankHandler.GetAccountByID)
 		accountGroup.POST("/transfer", ginBankHandler.Transfer)
+		accountGroup.POST("/withdraw", ginBankHandler.Withdraw)
+		accountGroup.GET("/mutations", ginBankHandler.GetMutations)
 	}
 
 	// -------------------------------------------------------------------------

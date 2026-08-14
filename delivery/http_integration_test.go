@@ -7,13 +7,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+
 	"gotest/delivery"
 	"gotest/repository"
 	"gotest/usecase"
 )
 
-// Helper setup HTTP Test Server dengan Clean Architecture & Auth Middleware
-func setupTestServer() *httptest.Server {
+func setupGinTestServer() *httptest.Server {
+	gin.SetMode(gin.TestMode)
 	jwtSecret := "TestSecretKey123"
 
 	bankRepo := repository.NewMemoryBankRepository()
@@ -22,21 +24,32 @@ func setupTestServer() *httptest.Server {
 	bankUsecase := usecase.NewBankUsecase(bankRepo)
 	authUsecase := usecase.NewAuthUsecase(userRepo, bankUsecase, jwtSecret)
 
-	bankHandler := delivery.NewBankHandler(bankUsecase)
-	authHandler := delivery.NewAuthHandler(authUsecase)
-	authMiddleware := delivery.NewAuthMiddleware(authUsecase)
+	ginBankHandler := delivery.NewGinBankHandler(bankUsecase, authUsecase)
+	ginAuthMiddleware := delivery.NewGinAuthMiddleware(authUsecase)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/auth/register", authHandler.Register)
-	mux.HandleFunc("/auth/login", authHandler.Login)
-	mux.HandleFunc("/accounts/get", authMiddleware.Protect(bankHandler.GetAccountByID))
-	mux.HandleFunc("/accounts/transfer", authMiddleware.Protect(bankHandler.Transfer))
+	r := gin.New()
+	r.Use(gin.Recovery())
 
-	return httptest.NewServer(mux)
+	authGroup := r.Group("/auth")
+	{
+		authGroup.POST("/register", ginBankHandler.Register)
+		authGroup.POST("/login", ginBankHandler.Login)
+	}
+
+	accountGroup := r.Group("/accounts")
+	accountGroup.Use(ginAuthMiddleware.RequireAuth())
+	{
+		accountGroup.GET("/get", ginBankHandler.GetAccountByID)
+		accountGroup.POST("/transfer", ginBankHandler.Transfer)
+		accountGroup.POST("/withdraw", ginBankHandler.Withdraw)
+		accountGroup.GET("/mutations", ginBankHandler.GetMutations)
+	}
+
+	return httptest.NewServer(r)
 }
 
 func TestHTTPIntegration_FullFlow(t *testing.T) {
-	ts := setupTestServer()
+	ts := setupGinTestServer()
 	defer ts.Close()
 
 	client := ts.Client()
@@ -58,11 +71,12 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 	var accountIDBudi string
 	var accountIDSiti string
 
-	// 2. TEST: Register User 'budi' (Dapat Akun Saldo 1.000.000)
+	// 2. TEST: Register User 'budi' dengan PIN 6-Digit (123456) & Saldo 1.000.000
 	t.Run("2. Register User Budi", func(t *testing.T) {
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"username":        "budi",
 			"password":        "password123",
+			"pin":             "123456",
 			"initial_balance": 1000000,
 		})
 
@@ -87,11 +101,12 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 		t.Logf("Token Budi: %s..., AccountID: %s", tokenBudi[:20], accountIDBudi)
 	})
 
-	// 3. TEST: Register User 'siti' (Dapat Akun Saldo 500.000)
+	// 3. TEST: Register User 'siti' dengan PIN 6-Digit (654321) & Saldo 500.000
 	t.Run("3. Register User Siti", func(t *testing.T) {
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"username":        "siti",
 			"password":        "password456",
+			"pin":             "654321",
 			"initial_balance": 500000,
 		})
 
@@ -151,12 +166,14 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 		}
 	})
 
-	// 6. TEST: Transfer Saldo Rp 300.000 dari Budi ke Siti Membawa Bearer Token
-	t.Run("6. Protected Transfer Saldo With JWT Token", func(t *testing.T) {
+	// 6. TEST: Transfer Saldo Rp 300.000 dengan Verifikasi PIN 6-Digit (123456)
+	t.Run("6. Protected Transfer Saldo With 6-Digit PIN", func(t *testing.T) {
 		transferBody, _ := json.Marshal(map[string]interface{}{
 			"from_account_id": accountIDBudi,
 			"to_account_id":   accountIDSiti,
+			"pin":             "123456",
 			"amount":          300000,
+			"description":     "Transfer Bayar Sewa Kos",
 		})
 
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/accounts/transfer", bytes.NewBuffer(transferBody))
@@ -178,6 +195,53 @@ func TestHTTPIntegration_FullFlow(t *testing.T) {
 
 		if tx["amount"] != float64(300000) || tx["type"] != "TRANSFER" {
 			t.Errorf("Transaksi tidak sesuai: %v", tx)
+		}
+	})
+
+	// 7. TEST: Tarik Tunai Rp 100.000 dengan Verifikasi PIN 6-Digit (123456)
+	t.Run("7. Protected Tarik Tunai (Withdraw)", func(t *testing.T) {
+		withdrawBody, _ := json.Marshal(map[string]interface{}{
+			"account_id": accountIDBudi,
+			"pin":        "123456",
+			"amount":     100000,
+		})
+
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/accounts/withdraw", bytes.NewBuffer(withdrawBody))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+tokenBudi)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Withdraw gagal: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Ekspektasi Status 200 OK, dapat: %d", resp.StatusCode)
+		}
+	})
+
+	// 8. TEST: Cek Mutasi Transaksi Rekening Budi
+	t.Run("8. Protected Get Mutations", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/accounts/mutations?account_id="+accountIDBudi, nil)
+		req.Header.Set("Authorization", "Bearer "+tokenBudi)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Get mutations gagal: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Ekspektasi Status 200 OK, dapat: %d", resp.StatusCode)
+		}
+
+		var res map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&res)
+
+		mutations := res["mutations"].([]interface{})
+		if len(mutations) < 2 {
+			t.Errorf("Harus ada minimal 2 mutasi (1 transfer + 1 withdraw), dapat: %d", len(mutations))
 		}
 	})
 }

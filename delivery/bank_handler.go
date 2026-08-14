@@ -32,13 +32,23 @@ func writeError(w http.ResponseWriter, status int, message string) {
 // DTO Requests
 type CreateAccountRequest struct {
 	OwnerName      string  `json:"owner_name"`
+	AccountType    string  `json:"account_type"`
+	PIN            string  `json:"pin"`
 	InitialBalance float64 `json:"initial_balance"`
 }
 
 type TransferRequest struct {
 	FromAccountID string  `json:"from_account_id"`
 	ToAccountID   string  `json:"to_account_id"`
+	PIN           string  `json:"pin"`
 	Amount        float64 `json:"amount"`
+	Description   string  `json:"description"`
+}
+
+type WithdrawRequest struct {
+	AccountID string  `json:"account_id"`
+	PIN       string  `json:"pin"`
+	Amount    float64 `json:"amount"`
 }
 
 // POST /accounts/create
@@ -54,8 +64,7 @@ func (h *BankHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Teruskan request context r.Context() ke usecase
-	acc, err := h.usecase.CreateAccount(r.Context(), req.OwnerName, req.InitialBalance)
+	acc, err := h.usecase.CreateAccount(r.Context(), req.OwnerName, req.AccountType, req.PIN, req.InitialBalance)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -99,7 +108,7 @@ func (h *BankHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := h.usecase.Transfer(r.Context(), req.FromAccountID, req.ToAccountID, req.Amount)
+	tx, err := h.usecase.Transfer(r.Context(), req.FromAccountID, req.ToAccountID, req.PIN, req.Amount, req.Description)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

@@ -18,6 +18,7 @@ func NewAuthHandler(u domain.AuthUsecase) *AuthHandler {
 type RegisterRequest struct {
 	Username       string  `json:"username"`
 	Password       string  `json:"password"`
+	PIN            string  `json:"pin"`
 	InitialBalance float64 `json:"initial_balance"`
 }
 
@@ -45,7 +46,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, token, err := h.authUsecase.Register(r.Context(), req.Username, req.Password, req.InitialBalance)
+	if req.PIN == "" {
+		req.PIN = "123456"
+	}
+
+	user, token, err := h.authUsecase.Register(r.Context(), req.Username, req.Password, req.PIN, req.InitialBalance)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

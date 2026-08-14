@@ -28,13 +28,17 @@ func NewAuthUsecase(uRepo domain.UserRepository, bUsecase domain.BankUsecase, se
 	}
 }
 
-func (u *authUsecase) Register(ctx context.Context, username, password string, initialBalance float64) (*domain.User, string, error) {
+func (u *authUsecase) Register(ctx context.Context, username, password, pin string, initialBalance float64) (*domain.User, string, error) {
 	if len(username) < 3 || len(password) < 6 {
 		return nil, "", fmt.Errorf("username minimal 3 karakter dan password minimal 6 karakter")
 	}
 
+	if pin == "" {
+		pin = "123456" // Default 6-digit PIN jika tidak diisi
+	}
+
 	// 1. Buat rekening bank otomatis untuk user baru
-	acc, err := u.bankUsecase.CreateAccount(ctx, username, initialBalance)
+	acc, err := u.bankUsecase.CreateAccount(ctx, username, "SAVINGS", pin, initialBalance)
 	if err != nil {
 		return nil, "", err
 	}

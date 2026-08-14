@@ -40,7 +40,7 @@ type UserRepository interface {
 }
 
 type AuthUsecase interface {
-	Register(ctx context.Context, username, password string, initialBalance float64) (*User, string, error)
+	Register(ctx context.Context, username, password, pin string, initialBalance float64) (*User, string, error)
 	Login(ctx context.Context, username, password string) (string, *User, error)
 	ValidateToken(tokenString string) (*JWTClaims, error)
 }
