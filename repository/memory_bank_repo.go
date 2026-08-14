@@ -60,11 +60,47 @@ func (r *memoryBankRepository) CreateTransaction(ctx context.Context, tx *domain
 	r.transactions = append(r.transactions, *tx)
 	return nil
 }
-// ExecTx untuk in-memory repository (menggunakan mutex lock)
+
+// Struct transaksi khusus untuk ExecTx agar tidak terjadi RLock/Lock deadlock pada goroutine yang sama
+type txMemoryRepository struct {
+	repo *memoryBankRepository
+}
+
+func (r *txMemoryRepository) CreateAccount(ctx context.Context, acc *domain.Account) error {
+	r.repo.accounts[acc.ID] = acc
+	return nil
+}
+
+func (r *txMemoryRepository) GetAccountByID(ctx context.Context, id string) (*domain.Account, error) {
+	acc, exists := r.repo.accounts[id]
+	if !exists {
+		return nil, domain.ErrAccountNotFound
+	}
+	return acc, nil
+}
+
+func (r *txMemoryRepository) UpdateAccountBalance(ctx context.Context, id string, newBalance float64) error {
+	acc, exists := r.repo.accounts[id]
+	if !exists {
+		return domain.ErrAccountNotFound
+	}
+	acc.Balance = newBalance
+	return nil
+}
+
+func (r *txMemoryRepository) CreateTransaction(ctx context.Context, tx *domain.Transaction) error {
+	r.repo.transactions = append(r.repo.transactions, *tx)
+	return nil
+}
+
+func (r *txMemoryRepository) ExecTx(ctx context.Context, fn func(repo domain.BankRepository) error) error {
+	return fn(r)
+}
+
+// ExecTx untuk in-memory repository (mengisolasi lock dalam 1 transaksi)
 func (r *memoryBankRepository) ExecTx(ctx context.Context, fn func(repo domain.BankRepository) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return fn(r)
+	return fn(&txMemoryRepository{repo: r})
 }
-
