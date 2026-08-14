@@ -70,3 +70,21 @@ func (r *gormBankRepository) ExecTx(ctx context.Context, fn func(repo domain.Ban
 		return fn(txRepo)
 	})
 }
+
+func (r *gormBankRepository) GetAccountByNumber(ctx context.Context, accNum string) (*domain.Account, error) {
+	var acc domain.Account
+	err := r.db.WithContext(ctx).First(&acc, "account_number = ?", accNum).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrAccountNotFound
+	}
+	return &acc, err
+}
+
+func (r *gormBankRepository) GetTransactionsByAccountID(ctx context.Context, accountID string) ([]domain.Transaction, error) {
+	var txs []domain.Transaction
+	err := r.db.WithContext(ctx).
+		Where("from_account_id = ? OR to_account_id = ?", accountID, accountID).
+		Order("timestamp desc").
+		Find(&txs).Error
+	return txs, err
+}

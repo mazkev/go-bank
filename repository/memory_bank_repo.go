@@ -104,3 +104,48 @@ func (r *memoryBankRepository) ExecTx(ctx context.Context, fn func(repo domain.B
 
 	return fn(&txMemoryRepository{repo: r})
 }
+
+func (r *memoryBankRepository) GetAccountByNumber(ctx context.Context, accNum string) (*domain.Account, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, acc := range r.accounts {
+		if acc.AccountNumber == accNum {
+			return acc, nil
+		}
+	}
+	return nil, domain.ErrAccountNotFound
+}
+
+func (r *memoryBankRepository) GetTransactionsByAccountID(ctx context.Context, accountID string) ([]domain.Transaction, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []domain.Transaction
+	for _, tx := range r.transactions {
+		if tx.FromAccountID == accountID || tx.ToAccountID == accountID {
+			result = append(result, tx)
+		}
+	}
+	return result, nil
+}
+
+// Dan tambahkan juga di struct txMemoryRepository (di bagian paling bawah file memory_bank_repo.go):
+func (r *txMemoryRepository) GetAccountByNumber(ctx context.Context, accNum string) (*domain.Account, error) {
+	for _, acc := range r.repo.accounts {
+		if acc.AccountNumber == accNum {
+			return acc, nil
+		}
+	}
+	return nil, domain.ErrAccountNotFound
+}
+
+func (r *txMemoryRepository) GetTransactionsByAccountID(ctx context.Context, accountID string) ([]domain.Transaction, error) {
+	var result []domain.Transaction
+	for _, tx := range r.repo.transactions {
+		if tx.FromAccountID == accountID || tx.ToAccountID == accountID {
+			result = append(result, tx)
+		}
+	}
+	return result, nil
+}
