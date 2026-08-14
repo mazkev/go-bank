@@ -19,11 +19,11 @@ import (
 )
 
 func main() {
-	// 1. Load Konfigurasi Environment Variables dari file .env
+	// 1. Load Konfigurasi Environment Variables
 	cfg := config.LoadConfig()
 	gin.SetMode(cfg.GinMode)
 
-	// 2. Inisialisasi Database SQLite Nyata
+	// 2. Inisialisasi Database SQLite
 	db, err := repository.InitDB(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("Gagal terhubung ke Database: %v", err)
@@ -34,7 +34,7 @@ func main() {
 	bankRepo := repository.NewGORMBankRepository(db)
 	userRepo := repository.NewGORMUserRepository(db)
 
-	// 4. Inisialisasi Usecases (Inject Config JWT Secret)
+	// 4. Inisialisasi Usecases
 	bankUsecase := usecase.NewBankUsecase(bankRepo)
 	authUsecase := usecase.NewAuthUsecase(userRepo, bankUsecase, cfg.JWTSecret)
 
@@ -44,7 +44,12 @@ func main() {
 
 	// 6. Inisialisasi Gin Engine
 	r := gin.Default()
+
+	// -------------------------------------------------------------------------
+	// GLOBAL MIDDLEWARES: CORS & IP RATE LIMITER
+	// -------------------------------------------------------------------------
 	r.Use(delivery.CORSMiddleware())
+	r.Use(delivery.RateLimitMiddleware(5, 10)) // Batas: 5 req/detik, burst 10
 
 	// -------------------------------------------------------------------------
 	// GIN ROUTE GROUPS
@@ -70,9 +75,9 @@ func main() {
 		Handler: r,
 	}
 
-	// Jalankan HTTP Server secara asinkron di dalam Goroutine terpisah
 	go func() {
 		fmt.Printf("\n🚀 High-Performance Production Bank API berjalan di http://localhost:%s\n", cfg.Port)
+		fmt.Println("🛡️  Protection: IP Rate Limiter Active (5 req/sec, burst 10)")
 		fmt.Println("⚡ Features: Gin Router, CORS, Graceful Shutdown, .env Config, JWT Auth, GORM SQLite DB")
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -80,14 +85,12 @@ func main() {
 		}
 	}()
 
-	// Menunggu Sinyal Mati dari Sistem Operasi (Ctrl+C / SIGINT / SIGTERM)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit // Program tertahan di sini sampai ada sinyal pemberhentian
+	<-quit
 
 	log.Println("⚠️  Sinyal pemberhentian diterima! Memulai Graceful Shutdown...")
 
-	// Berikan batas waktu (timeout) 5 detik untuk menyelesaikan transaksi HTTP yang sedang aktif
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -95,5 +98,5 @@ func main() {
 		log.Fatalf("❌ Graceful Shutdown terpaksa dihentikan: %v", err)
 	}
 
-	log.Println("✅ Server berhasil berhenti secara mulus (Graceful Shutdown selesai). Sampai jumpa!")
+	log.Println("✅ Server berhasil berhenti secara mulus. Sampai jumpa!")
 }
