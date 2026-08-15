@@ -3,10 +3,14 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/glebarez/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
+	"gotest/config"
 	"gotest/domain"
 )
 
@@ -19,9 +23,21 @@ func NewGORMBankRepository(db *gorm.DB) domain.BankRepository {
 	return &gormBankRepository{db: db}
 }
 
-// Inisialisasi Database SQLite & Auto-Migrate Tabel Domain
-func InitDB(dbPath string) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+// InitDB menginisialisasi koneksi Database (Dukungan Multi-Driver: SQLite & PostgreSQL)
+func InitDB(cfg *config.Config) (*gorm.DB, error) {
+	var dialector gorm.Dialector
+
+	if cfg.DBDriver == "postgres" {
+		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=Asia/Jakarta",
+			cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBPort, cfg.DBSSLMode)
+		dialector = postgres.Open(dsn)
+	} else {
+		dialector = sqlite.Open(cfg.DBPath)
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		return nil, err
 	}

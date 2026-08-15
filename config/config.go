@@ -7,29 +7,40 @@ import (
 )
 
 type Config struct {
-	Port      string
-	JWTSecret string
-	DBPath    string
-	GinMode   string
+	Port       string
+	DBDriver   string // "sqlite" atau "postgres"
+	DBPath     string // Path file untuk SQLite (contoh: bank.db)
+	DBHost     string // Host untuk PostgreSQL (contoh: localhost)
+	DBPort     string // Port untuk PostgreSQL (contoh: 5432)
+	DBUser     string // Username PostgreSQL (contoh: postgres)
+	DBPassword string // Password PostgreSQL
+	DBName     string // Nama Database PostgreSQL
+	DBSSLMode  string // disable, require, dll.
+	JWTSecret  string
+	GinMode    string
 }
 
-// LoadConfig membaca environment variables dari file .env
 func LoadConfig() *Config {
-	// Load file .env jika ada (tidak error jika file tidak ditemukan di prod)
-	_ = godotenv.Load()
+	_ = godotenv.Load() // Memuat variabel dari file .env jika ada
 
 	return &Config{
-		Port:      getEnv("PORT", "8080"),
-		JWTSecret: getEnv("JWT_SECRET", "DefaultFallbackSecretKey"),
-		DBPath:    getEnv("DB_PATH", "bank.db"),
-		GinMode:   getEnv("GIN_MODE", "debug"),
+		Port:       getEnv("PORT", "8080"),
+		DBDriver:   getEnv("DB_DRIVER", "sqlite"),
+		DBPath:     getEnv("DB_PATH", "bank.db"),
+		DBHost:     getEnv("DB_HOST", "localhost"),
+		DBPort:     getEnv("DB_PORT", "5432"),
+		DBUser:     getEnv("DB_USER", "postgres"),
+		DBPassword: getEnv("DB_PASSWORD", "postgres"),
+		DBName:     getEnv("DB_NAME", "bank_db"),
+		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
+		JWTSecret:  getEnv("JWT_SECRET", "SuperSecretBankingKey2026"),
+		GinMode:    getEnv("GIN_MODE", "release"),
 	}
 }
 
-// Helper untuk membaca env var dengan nilai default (fallback)
-func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists && value != "" {
-		return value
+func getEnv(key, defaultValue string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
 	}
-	return fallback
+	return defaultValue
 }

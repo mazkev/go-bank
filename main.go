@@ -28,12 +28,12 @@ func main() {
 	cfg := config.LoadConfig()
 	gin.SetMode(cfg.GinMode)
 
-	// 2. Inisialisasi Database SQLite
-	db, err := repository.InitDB(cfg.DBPath)
+	// 2. Inisialisasi Database (Multi-Driver: SQLite / PostgreSQL)
+	db, err := repository.InitDB(cfg)
 	if err != nil {
-		log.Fatalf("Gagal terhubung ke Database: %v", err)
+		log.Fatalf("Gagal terhubung ke Database (%s): %v", cfg.DBDriver, err)
 	}
-	fmt.Printf("💾 Database SQLite ('%s') & Auto-Migration Berhasil!\n", cfg.DBPath)
+	fmt.Printf("💾 Database Driver '%s' & Auto-Migration Berhasil!\n", cfg.DBDriver)
 
 	// 3. Inisialisasi GORM Repositories
 	bankRepo := repository.NewGORMBankRepository(db)
