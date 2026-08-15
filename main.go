@@ -23,7 +23,8 @@ import (
 )
 
 func main() {
-	// 1. Load Konfigurasi Environment Variables
+	// 1. Inisialisasi Go 1.21+ Structured JSON Logger & Load Konfigurasi
+	logger := delivery.InitLogger()
 	cfg := config.LoadConfig()
 	gin.SetMode(cfg.GinMode)
 
@@ -46,12 +47,11 @@ func main() {
 	ginBankHandler := delivery.NewGinBankHandler(bankUsecase, authUsecase)
 	ginAuthMiddleware := delivery.NewGinAuthMiddleware(authUsecase)
 
-	// 6. Inisialisasi Gin Engine
-	r := gin.Default()
-
-	// -------------------------------------------------------------------------
-	// GLOBAL MIDDLEWARES: CORS & IP RATE LIMITER
-	// -------------------------------------------------------------------------
+	// 6. Inisialisasi Gin Engine dengan Custom Structured Logger & Request-ID
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(delivery.RequestIDMiddleware())
+	r.Use(delivery.StructuredLoggerMiddleware(logger))
 	r.Use(delivery.CORSMiddleware())
 	r.Use(delivery.RateLimitMiddleware(5, 10)) // Batas: 5 req/detik, burst 10
 
@@ -90,7 +90,7 @@ func main() {
 		fmt.Printf("\n🚀 High-Performance Production Bank API berjalan di http://localhost:%s\n", cfg.Port)
 		fmt.Printf("📖 Interactive Swagger API UI: http://localhost:%s/swagger/index.html\n", cfg.Port)
 		fmt.Println("🛡️  Protection: IP Rate Limiter Active (5 req/sec, burst 10)")
-		fmt.Println("⚡ Features: Gin Router, CORS, Graceful Shutdown, .env Config, JWT Auth, GORM SQLite DB, Swagger UI")
+		fmt.Println("📊 Observability: Structured JSON Logger (slog) & X-Request-ID Tracking Active")
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server Listen error: %v\n", err)
